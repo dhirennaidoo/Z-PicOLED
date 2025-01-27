@@ -1,0 +1,885 @@
+#Uses Pico-OLED, Pico-CAN-B
+
+from machine import Pin,SPI,PWM
+import framebuf
+import time
+
+
+## Configuration Registers */
+CANSTAT      = 0x0E
+CANCTRL      = 0x0F
+BFPCTRL      = 0x0C
+TEC          = 0x1C
+REC          = 0x1D
+CNF3         = 0x28
+CNF2         = 0x29
+CNF1         = 0x2A
+CANINTE      = 0x2B
+CANINTF      = 0x2C
+EFLG         = 0x2D
+TXRTSCTRL    = 0x0D
+
+##  Recieve Filters */
+RXF0SIDH     = 0x00
+RXF0SIDL     = 0x01
+RXF0EID8     = 0x02
+RXF0EID0     = 0x03
+RXF1SIDH     = 0x04
+RXF1SIDL     = 0x05
+RXF1EID8     = 0x06
+RXF1EID0     = 0x07
+RXF2SIDH     = 0x08
+RXF2SIDL     = 0x09
+RXF2EID8     = 0x0A
+RXF2EID0     = 0x0B
+RXF3SIDH     = 0x10
+RXF3SIDL     = 0x11
+RXF3EID8     = 0x12
+RXF3EID0     = 0x13
+RXF4SIDH     = 0x14
+RXF4SIDL     = 0x15
+RXF4EID8     = 0x16
+RXF4EID0     = 0x17
+RXF5SIDH     = 0x18
+RXF5SIDL     = 0x19
+RXF5EID8     = 0x1A
+RXF5EID0     = 0x1B
+
+## Receive Masks */
+RXM0SIDH     = 0x20
+RXM0SIDL     = 0x21
+RXM0EID8     = 0x22
+RXM0EID0     = 0x23
+RXM1SIDH     = 0x24
+RXM1SIDL     = 0x25
+RXM1EID8     = 0x26
+RXM1EID0     = 0x27
+
+## Tx Buffer 0 */
+TXB0CTRL     = 0x30
+TXB0SIDH     = 0x31
+TXB0SIDL     = 0x32
+TXB0EID8     = 0x33
+TXB0EID0     = 0x34
+TXB0DLC      = 0x35
+TXB0D0       = 0x36
+TXB0D1       = 0x37
+TXB0D2       = 0x38
+TXB0D3       = 0x39
+TXB0D4       = 0x3A
+TXB0D5       = 0x3B
+TXB0D6       = 0x3C
+TXB0D7       = 0x3D
+
+## Tx Buffer 1 */
+TXB1CTRL     = 0x40
+TXB1SIDH     = 0x41
+TXB1SIDL     = 0x42
+TXB1EID8     = 0x43
+TXB1EID0     = 0x44
+TXB1DLC      = 0x45
+TXB1D0       = 0x46
+TXB1D1       = 0x47
+TXB1D2       = 0x48
+TXB1D3       = 0x49
+TXB1D4       = 0x4A
+TXB1D5       = 0x4B
+TXB1D6       = 0x4C
+TXB1D7       = 0x4D
+
+## Tx Buffer 2 */
+TXB2CTRL     = 0x50
+TXB2SIDH     = 0x51
+TXB2SIDL     = 0x52
+TXB2EID8     = 0x53
+TXB2EID0     = 0x54
+TXB2DLC      = 0x55
+TXB2D0       = 0x56
+TXB2D1       = 0x57
+TXB2D2       = 0x58
+TXB2D3       = 0x59
+TXB2D4       = 0x5A
+TXB2D5       = 0x5B
+TXB2D6       = 0x5C
+TXB2D7       = 0x5D
+
+# ## Rx Buffer 0 */
+RXB0CTRL     = 0x60
+RXB0SIDH     = 0x61
+RXB0SIDL     = 0x62
+RXB0EID8     = 0x63
+RXB0EID0     = 0x64
+RXB0DLC      = 0x65
+RXB0D0       = 0x66
+RXB0D1       = 0x67
+RXB0D2       = 0x68
+RXB0D3       = 0x69
+RXB0D4       = 0x6A
+RXB0D5       = 0x6B
+RXB0D6       = 0x6C
+RXB0D7       = 0x6D
+
+# ## Rx Buffer 1 */
+RXB1CTRL     = 0x70
+RXB1SIDH     = 0x71
+RXB1SIDL     = 0x72
+RXB1EID8     = 0x73
+RXB1EID0     = 0x74
+RXB1DLC      = 0x75
+RXB1D0       = 0x76
+RXB1D1       = 0x77
+RXB1D2       = 0x78
+RXB1D3       = 0x79
+RXB1D4       = 0x7A
+RXB1D5       = 0x7B
+RXB1D6       = 0x7C
+RXB1D7       = 0x7D
+
+
+# ##******************************************************************
+ # *               Bit register masks                                *
+ # *******************************************************************/
+
+# ## TXBnCTRL */
+TXREQ        = 0x08
+TXP          = 0x03
+
+# ## RXBnCTRL */
+RXM          = 0x60
+BUKT         = 0x04
+
+# ## CANCTRL */
+REQOP        = 0xE0
+ABAT         = 0x10
+#define	OSM          = 0x08
+CLKEN        = 0x04
+CLKPRE       = 0x03
+
+# ## CANSTAT */
+REQOP        = 0xE0
+ICOD         = 0x0E
+
+## CANINTE */
+RX0IE        = 0x01
+RX1IE        = 0x02
+TX0IE        = 0x04
+TX1IE        = 0x80
+TX2IE        = 0x10
+ERRIE        = 0x20
+WAKIE        = 0x40
+MERRE        = 0x80
+
+# ## CANINTF */
+RX0IF        = 0x01
+RX1IF        = 0x02
+TX0IF        = 0x04
+TX1IF        = 0x80
+TX2IF        = 0x10
+ERRIF        = 0x20
+WAKIF        = 0x40
+MERRF        = 0x80
+
+# ## BFPCTRL */
+B1BFS        = 0x20
+B0BFS        = 0x10
+B1BFE        = 0x08
+B0BFE        = 0x04
+B1BFM        = 0x02
+B0BFM        = 0x01
+
+# ## CNF1 Masks */
+SJW          = 0xC0
+BRP          = 0x3F
+
+# ## CNF2 Masks */
+BTLMODE      = 0x80
+SAM          = 0x40
+PHSEG1       = 0x38
+PRSEG        = 0x07
+
+# ## CNF3 Masks */
+WAKFIL       = 0x40
+PHSEG2       = 0x07
+
+# ## TXRTSCTRL Masks */
+TXB2RTS      = 0x04
+TXB1RTS      = 0x02
+TXB0RTS      = 0x01
+
+
+# ##******************************************************************
+ # *                    Bit Timing Configuration                     *
+ # *******************************************************************/
+ 
+# ## CNF1 */
+SJW_1TQ      = 0x40
+SJW_2TQ      = 0x80
+SJW_3TQ      = 0x90
+SJW_4TQ      = 0xC0
+
+# ## CNF2 */
+BTLMODE_CNF3 = 0x80
+BTLMODE_PH1_IPT  = 0x00
+
+SMPL_3X      = 0x40
+SMPL_1X      = 0x00
+
+PHSEG1_8TQ   = 0x38
+PHSEG1_7TQ   = 0x30
+PHSEG1_6TQ   = 0x28
+PHSEG1_5TQ   = 0x20
+PHSEG1_4TQ   = 0x18
+PHSEG1_3TQ   = 0x10
+PHSEG1_2TQ   = 0x08
+PHSEG1_1TQ   = 0x00
+
+PRSEG_8TQ    = 0x07
+PRSEG_7TQ    = 0x06
+PRSEG_6TQ    = 0x05
+PRSEG_5TQ    = 0x04
+PRSEG_4TQ    = 0x03
+PRSEG_3TQ    = 0x02
+PRSEG_2TQ    = 0x01
+PRSEG_1TQ    = 0x00
+
+# ## CNF3 */
+PHSEG2_8TQ   = 0x07
+PHSEG2_7TQ   = 0x06
+PHSEG2_6TQ   = 0x05
+PHSEG2_5TQ   = 0x04
+PHSEG2_4TQ   = 0x03
+PHSEG2_3TQ   = 0x02
+PHSEG2_2TQ   = 0x01
+PHSEG2_1TQ   = 0x00
+
+SOF_ENABLED  = 0x80
+WAKFIL_ENABLED  =0x40
+WAKFIL_DISABLED =0x00
+
+
+# ##******************************************************************
+ # *                  Control/Configuration Registers                *
+ # *******************************************************************/
+
+# ## CANINTE */
+RX0IE_ENABLED= 0x01
+RX0IE_DISABLED  =0x00
+RX1IE_ENABLED =0x02
+RX1IE_DISABLED  =0x00
+G_RXIE_ENABLED  =0x03
+G_RXIE_DISABLED =0x00
+
+TX0IE_ENABLED= 0x04
+TX0IE_DISABLED  =0x00
+TX1IE_ENABLED =0x08
+TX2IE_DISABLED  =0x00
+TX2IE_ENABLED =0x10
+TX2IE_DISABLED  =0x00
+G_TXIE_ENABLED  =0x1C
+G_TXIE_DISABLED =0x00
+
+ERRIE_ENABLED= 0x20
+ERRIE_DISABLED  =0x00
+WAKIE_ENABLED= 0x40
+WAKIE_DISABLED  =0x00
+IVRE_ENABLED = 0x80
+IVRE_DISABLED= 0x00
+
+# ## CANINTF */
+RX0IF_SET    = 0x01
+RX0IF_RESET  = 0x00
+RX1IF_SET    = 0x02
+RX1IF_RESET  = 0x00
+TX0IF_SET    = 0x04
+TX0IF_RESET  = 0x00
+TX1IF_SET    = 0x08
+TX2IF_RESET  = 0x00
+TX2IF_SET    = 0x10
+TX2IF_RESET  = 0x00
+ERRIF_SET    = 0x20
+ERRIF_RESET  = 0x00
+WAKIF_SET    = 0x40
+WAKIF_RESET  = 0x00
+IVRF_SET     = 0x80
+IVRF_RESET   = 0x00
+
+# ## CANCTRL */ 
+REQOP_CONFIG = 0x80
+REQOP_LISTEN = 0x60
+REQOP_LOOPBACK  =0x40
+REQOP_SLEEP  = 0x20
+REQOP_NORMAL = 0x00
+
+ABORT        = 0x10
+
+OSM_ENABLED  = 0x08
+
+CLKOUT_ENABLED  =0x04
+CLKOUT_DISABLED =0x00
+CLKOUT_PRE_8 = 0x03
+CLKOUT_PRE_4 = 0x02
+CLKOUT_PRE_2 = 0x01
+CLKOUT_PRE_1 = 0x00
+
+# ## CANSTAT */
+OPMODE_CONFIG= 0x80
+OPMODE_LISTEN= 0x60
+OPMODE_LOOPBACK =0x40
+OPMODE_SLEEP = 0x20
+OPMODE_NORMAL= 0x00
+
+
+# ## RXBnCTRL */
+RXM_RCV_ALL  = 0x60
+RXM_VALID_EXT= 0x40
+RXM_VALID_STD= 0x20
+RXM_VALID_ALL= 0x00
+
+RXRTR_REMOTE = 0x08
+RXRTR_NO_REMOTE =0x00
+
+BUKT_ROLLOVER = 0x04
+BUKT_NO_ROLLOVER =0x00
+
+FILHIT0_FLTR_1  =0x01
+FILHIT0_FLTR_0  =0x00
+
+FILHIT1_FLTR_5  =0x05
+FILHIT1_FLTR_4  =0x04
+FILHIT1_FLTR_3  =0x03
+FILHIT1_FLTR_2  =0x02
+FILHIT1_FLTR_1  =0x01
+FILHIT1_FLTR_0  =0x00
+
+
+# ## TXBnCTRL */
+TXREQ_SET    = 0x08
+TXREQ_CLEAR  = 0x00
+
+TXP_HIGHEST  = 0x03
+TXP_INTER_HIGH  =0x02
+TXP_INTER_LOW= 0x01
+TXP_LOWEST   = 0x00
+    
+
+# ##******************************************************************
+ # *                  Register Bit Masks                             *
+ # *******************************************************************/
+ 
+DLC_0       = 0x00
+DLC_1       = 0x01
+DLC_2       = 0x02
+DLC_3       = 0x03
+DLC_4       = 0x04
+DLC_5       = 0x05
+DLC_6       = 0x06
+DLC_7       = 0x07    
+DLC_8       = 0x08
+
+
+# ##******************************************************************
+ # *                  CAN spi commands                               *
+ # MCP2515 datasheet, Table 12-1 Page 64
+ # *******************************************************************/
+
+CAN_RESET    = 0xC0
+CAN_READ     = 0x03
+CAN_WRITE    = 0x02
+CAN_RTS      = 0x80
+CAN_RTS_TXB0 = 0x81
+CAN_RTS_TXB1 = 0x82
+CAN_RTS_TXB2 = 0x84
+CAN_RD_STATUS= 0xA0
+CAN_BIT_MODIFY  =0x05  
+CAN_RX_STATUS= 0xB0
+CAN_RD_RX_BUFF  =0x90
+CAN_LOAD_TX  = 0x40  
+
+
+# ##******************************************************************
+ # *                  Miscellaneous                                  *
+ # *******************************************************************/
+
+DUMMY_BYTE   = 0x00
+TXB0         = 0x31
+TXB1         = 0x41
+TXB2         = 0x51
+RXB0         = 0x61
+RXB1         = 0x71
+EXIDE_SET    = 0x08
+EXIDE_RESET  = 0x00
+# #CS   PORTAbits.RA2
+
+CAN_RATE = {
+	"5KBPS"   : [0xA7, 0XBF, 0x07],
+	"10KBPS"  : [0x31, 0XA4, 0X04],
+	"20KBPS"  : [0x18, 0XA4, 0x04],
+	"50KBPS"  : [0x09, 0XA4, 0x04],
+	"100KBPS" : [0x04, 0x9E, 0x03],
+	"125KBPS" : [0x03, 0x9E, 0x03],
+	"250KBPS" : [0x01, 0x1E, 0x03],
+	"500KBPS" : [0x00, 0x9E, 0x03],
+	"800KBPS" : [0x00, 0x92, 0x02],
+	"1000KBPS": [0x00, 0x82, 0x02],
+}
+
+gRXFlag=0
+sRXFlag=0
+yRXFlag=0
+Com_RecBuff = [0, 0, 0, 0, 0, 0, 0, 0] #8
+# data = 0
+
+#=====Nissan SIDs=====
+SID_RPM = 0x23D
+SID_V   = 0x2D1
+SID_OIL_T = 0x551
+
+#=====Pins=====
+#CAN pins
+SPI0_CS1 = 1
+SPI0_CS0 = 5
+CAN_SCK = 6
+CAN_MOSI = 7
+CAN_MISO = 4
+
+#CAN-B pins
+DC = 8
+RST = 12
+MOSI = 11
+SCK = 10
+CS = 9
+
+# debug = False
+debug = True
+class MCP2515():
+    def __init__(self):
+        self.spi = SPI(0)
+        self.spi = SPI(0,10000_000,polarity=0, phase=0,sck=Pin(CAN_SCK),mosi=Pin(CAN_MOSI),miso=Pin(CAN_MISO))
+        self.cs = Pin(SPI0_CS0,Pin.OUT)
+        
+    def ReadByte(self, addr):
+        self.cs(0)
+        self.spi.write(bytearray([CAN_READ]))
+        self.spi.write(bytearray([addr]))
+        res = self.spi.read(1)
+        self.cs(1)
+        return int.from_bytes(res,'big')
+    def WriteByte(self, addr):
+        self.cs(0)
+        self.spi.write(bytearray([addr]))
+        self.cs(1)
+    def WriteBytes(self, addr, data):
+        self.cs(0)
+        self.spi.write(bytearray([CAN_WRITE]))
+        self.spi.write(bytearray([addr]))
+        self.spi.write(bytearray([data]))
+        self.cs(1)
+    def Reset(self):
+        self.cs(0)
+        self.spi.write(bytearray([CAN_RESET])) #Reset 0XC0
+        self.cs(1)
+		
+    def Init(self, speed="500KBPS",SID=None):
+        """
+        speed : String Text to display on screen
+        SID : Standard ID to filter on. If not supplied, filtering will be disabled.
+        """
+        print("Reset. Filtering on " + str(SID))
+        self.Reset()
+        time.sleep(0.1)
+			
+		#set baud rate 125Kbps
+		#<7:6>SJW=00(1TQ)
+		#<5:0>BRP=0x03(TQ=[2*(BRP+1)]/Fsoc=2*4/8M=1us)
+		#<5:0>BRP=0x03 (TQ=[2*(BRP+1)]/Fsoc=2*8/16M=1us)
+		# self.WriteBytes(CNF1, 7)		
+		# self.WriteBytes(CNF2,0x80|PHSEG1_3TQ|PRSEG_1TQ)		
+		# self.WriteBytes(CNF3,PHSEG2_3TQ)
+        self.WriteBytes(CNF1, CAN_RATE[speed][0])
+        self.WriteBytes(CNF2, CAN_RATE[speed][1])
+        self.WriteBytes(CNF3, CAN_RATE[speed][2])		
+
+		#set TXB0,TXB1
+		#<15:5> SID 11bit canid
+		#<BIT3> exide,1:extended 0:standard
+        self.WriteBytes(TXB0SIDH,0xFF)
+        self.WriteBytes(TXB0SIDL,0xE0)
+        self.WriteBytes(TXB0DLC,0x40|DLC_8)
+		# self.WriteBytes(TXB1SIDH,0x50)
+		# self.WriteBytes(TXB1SIDL,0x00)
+		# self.WriteBytes(TXB1DLC,0x40 | DLC_8)    #Set DLC = 3 bytes and RTR bit*/
+
+		#Set RX
+        self.WriteBytes(RXB0SIDH,0x00)
+        self.WriteBytes(RXB0SIDL,0x60)
+        self.WriteBytes(RXB0DLC, DLC_8)
+
+        #bit 6-5 RXM: Receive Buffer Operating Mode bits
+            #11 = Turn mask/filters off; receive any message (0x60)
+            #10 = Receive only valid messages with extended identifiers that meet filter criteria
+            #01 = Receive only valid messages with standard identifiers that meet filter criteria (0x20)
+            #00 = Receive all valid messages using either standard or extended identifiers that meet filter criteria
+            # 0x60: 0110 0000, 0x20: 0010 0000, 0x40: 0100 0000
+        
+        #Filter bits
+        if SID is None:
+            self.WriteBytes(RXB0CTRL,0x60)
+            self.WriteBytes(RXF0SIDH,0xFF)
+            self.WriteBytes(RXF0SIDL,0xE0)
+        else:
+            self.WriteBytes(RXB0CTRL,0x00)
+            self.WriteBytes(RXF0SIDH,(SID>>3)&0XFF)
+            self.WriteBytes(RXF0SIDL,(SID&0x07)<<5)
+        #Mask bits
+        self.WriteBytes(RXM0SIDH,0xFF)
+        self.WriteBytes(RXM0SIDL,0xE0)
+
+		#can int
+        self.WriteBytes(CANINTF,0x00)#clean interrupt flag
+        self.WriteBytes(CANINTE,0x01)#Receive Buffer 0 Full Interrupt Enable Bit
+
+        self.WriteBytes(CANCTRL, REQOP_NORMAL|CLKOUT_ENABLED)#
+
+        dummy=self.ReadByte(CANSTAT)
+        if( OPMODE_NORMAL != (dummy and 0xE0)):
+            self.WriteBytes(CANCTRL, REQOP_NORMAL|CLKOUT_ENABLED)#set normal mode
+
+    def Send(self, CAN_ID, CAN_TX_Buf, length1):
+        tempdata = self.ReadByte(CAN_RD_STATUS)
+        self.WriteBytes(TXB0SIDH, (CAN_ID>>3)&0XFF)
+        self.WriteBytes(TXB0SIDL, (CAN_ID&0x07)<<5)
+		
+        self.WriteBytes(TXB0EID8, 0)
+        self.WriteBytes(TXB0EID0, 0)
+        self.WriteBytes(TXB0DLC, length1)
+        for j in range(0, length1): 
+            self.WriteBytes(TXB0D0+j,CAN_TX_Buf[j])
+
+        if(tempdata&0x04):# TXREQ
+            time.sleep(0.01)
+            self.WriteBytes(TXB0CTRL, 0)#clean flag
+            while(1):#wite 
+                if(self.ReadByte(CAN_RD_STATUS)&0x04 != 1):
+                    break
+        self.WriteByte(CAN_RTS_TXB0)
+
+    def Receive(self, CAN_ID):
+        #CAN_ID: Standard identifier
+        #   MCP515 requires bits 10 - 3 as H and 2-0 as L
+
+        #Shift right 3 bits and write to 0x61
+        self.WriteBytes(RXB0SIDH, (CAN_ID>>3)&0XFF)
+        #Mask first 3 bits, shift left 5 bits and write to 0x62
+        self.WriteBytes(RXB0SIDL, (CAN_ID&0x07)<<5)
+        
+        #Clear lcoal buffer and Wait for receive flag
+        CAN_RX_Buf = []
+        while(1):
+            if(self.ReadByte(CANINTF) & 0x01):
+                #Get SID
+                intRXSIDH = self.ReadByte(RXB0SIDH)
+                intRXSIDL = self.ReadByte(RXB0SIDL)
+                intSID = (intRXSIDH << 3) + (intRXSIDL >> 5)
+                #print(str(intRXSIDH) + "+" + str(intRXSIDL) + "=" + str(intSID))
+                CAN_RX_Buf.append(str(intSID))
+                #CAN_RX_Buf.append(hex(intRXSIDH))
+                #CAN_RX_Buf.append(hex(intRXSIDL))
+                CAN_RX_Buf.append("-")
+                len = self.ReadByte(RXB0DLC)
+                #print(len)
+                for i in range(0, len): 
+                    CAN_RX_Buf.append(hex(self.ReadByte(RXB0D0+i)))
+                    # print(self.ReadByte(RXB0D0+i))
+                break
+
+        self.WriteBytes(CANINTF, 0)
+        self.WriteBytes(CANINTE,0x01)#enable
+        self.WriteBytes(RXB0SIDH,0x00)#clean
+        self.WriteBytes(RXB0SIDL,0x60)
+        return CAN_RX_Buf
+
+class OLED_2inch23(framebuf.FrameBuffer):
+    def __init__(self):
+        self.width = 128
+        self.height = 32
+        
+        self.cs = Pin(CS,Pin.OUT)
+        self.rst = Pin(RST,Pin.OUT)
+        
+        self.cs(1)
+        self.spi = SPI(1)
+        self.spi = SPI(1,1000_000)
+        self.spi = SPI(1,10000_000,polarity=0, phase=0,sck=Pin(SCK),mosi=Pin(MOSI),miso=None)
+        self.dc = Pin(DC,Pin.OUT)
+        self.dc(1)
+        self.buffer = bytearray(self.height * self.width // 8)
+        super().__init__(self.buffer, self.width, self.height, framebuf.MONO_VLSB)
+        self.init_display()
+        
+        self.white =   0xffff
+        self.black =   0x0000
+        
+    def write_cmd(self, cmd):
+        self.cs(1)
+        self.dc(0)
+        self.cs(0)
+        self.spi.write(bytearray([cmd]))
+        self.cs(1)
+
+    def write_data(self, buf):
+        self.cs(1)
+        self.dc(1)
+        self.cs(0)
+        self.spi.write(bytearray([buf]))
+        self.cs(1)
+
+    def init_display(self):
+        """Initialize dispaly"""  
+        self.rst(1)
+        time.sleep(0.001)
+        self.rst(0)
+        time.sleep(0.01)
+        self.rst(1)
+        
+        self.write_cmd(0xAE)#turn off OLED display*/
+    
+        self.write_cmd(0x04)#turn off OLED display*/
+
+        self.write_cmd(0x10)#turn off OLED display*/	
+    
+        self.write_cmd(0x40)#set lower column address*/ 
+        self.write_cmd(0x81)#set higher column address*/ 
+        self.write_cmd(0x80)#--set start line address  Set Mapping RAM Display Start Line (0x00~0x3F, SSD1305_CMD)
+        self.write_cmd(0xA1)#--set contrast control register
+        self.write_cmd(0xA6)# Set SEG Output Current Brightness 
+        self.write_cmd(0xA8)#--Set SEG/Column Mapping	
+        self.write_cmd(0x1F)#Set COM/Row Scan Direction   
+        self.write_cmd(0xC8)#--set normal display  
+        self.write_cmd(0xD3)#--set multiplex ratio(1 to 64)
+        self.write_cmd(0x00)#--1/64 duty
+        self.write_cmd(0xD5)#-set display offset	Shift Mapping RAM Counter (0x00~0x3F) 
+        self.write_cmd(0xF0)#-not offset
+        self.write_cmd(0xD8) #--set display clock divide ratio/oscillator frequency
+        self.write_cmd(0x05)#--set divide ratio, Set Clock as 100 Frames/Sec
+        self.write_cmd(0xD9)#--set pre-charge period
+        self.write_cmd(0xC2)#Set Pre-Charge as 15 Clocks & Discharge as 1 Clock
+        self.write_cmd(0xDA) #--set com pins hardware configuration 
+        self.write_cmd(0x12)   
+        self.write_cmd(0xDB) #set vcomh
+        self.write_cmd(0x08)#Set VCOM Deselect Level
+        self.write_cmd(0xAF); #-Set Page Addressing Mode (0x00/0x01/0x02)
+
+    def show(self):
+        for page in range(0,4):
+            self.write_cmd(0xb0 + page)
+            self.write_cmd(0x04)
+            self.write_cmd(0x10)
+            self.dc(1)
+            for num in range(0,128):
+                self.write_data(self.buffer[page*128+num])
+
+class displayHandler():
+    def __init__(self):
+        self.screenBuffer = []
+        self.Speed = int("0",10)
+        self.RPM = int("0",10)
+        self.OilT = int("0",10)
+        self.CoolantT = int("0",10)
+
+    def drawWelcomeScreen(self,OLED):
+        """
+        Will animate a Z logo when called.
+
+        Args:
+            OLED : OLED_2inch23 instance
+
+        Returns:
+            None
+        """
+        import framebuf
+        # 'Z-Badge', 128x32px
+        image = bytearray([0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x0f, 0xff, 0xff, 0xff, 0xff, 0xfc, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x3f, 0xff, 0xff, 0xff, 0xff, 0xf8, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xe0, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x01, 0xff, 0xff, 0xff, 0xf8, 0x01, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xe0, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x60, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x00, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3f, 0xff, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xfe, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0xff, 0xfc, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0xff, 0xf8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0f, 0xff, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1f, 0xff, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3f, 0xff, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7f, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xfe, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0xff, 0xfe, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x0f, 0xff, 0xff, 0xff, 0xff, 0xfe, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x3f, 0xff, 0xff, 0xff, 0xff, 0xfc, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x7f, 0xff, 0xff, 0xff, 0xff, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+        
+        frame = framebuf.FrameBuffer(image, 128, 32, framebuf.MONO_HLSB)
+
+        for i in range(-128,12,12):
+            print(i)
+            OLED.blit(frame,i,0)
+            OLED.show()
+            time.sleep(0.01)
+            OLED.fill(0)
+        time.sleep(2)
+
+    def writeLine(self,strText,OLED):
+        """
+        Will clear screen and display the last 3 entries populated by this function
+
+        strText : String Text to display on screen
+        OLED : OLED_2inch23 instance
+        """
+        self.screenBuffer.append(str(strText))
+        if len(self.screenBuffer) > 10:
+            del self.screenBuffer[:-10]
+        #print("Total of " + str(len(self.screenBuffer)) + " entries")
+        self.showBuffer(OLED)
+
+    def showBuffer(self,OLED):
+        txtLine1 = ""
+        txtLine2 = ""
+        txtLine3 = ""
+        if len(self.screenBuffer)>2:
+            txtLine1 = self.screenBuffer[-3]
+            txtLine2 = self.screenBuffer[-2]
+            txtLine3 = self.screenBuffer[-1]
+        elif len(self.screenBuffer)==2:
+            txtLine2 = self.screenBuffer[-2]
+            txtLine3 = self.screenBuffer[-1]
+        elif len(self.screenBuffer)==1:
+            txtLine3 = self.screenBuffer[-1]
+
+        #Clear screen
+        OLED.fill(0x0000) 
+
+        #print(txtLine1)
+        #OLED.text(txtLine1,1,2,OLED.white)
+        #print(txtLine2)
+        #OLED.text(txtLine2,1,12,OLED.white)
+        #print(txtLine3)
+        OLED.text(txtLine3,1,22,OLED.white)
+
+        OLED.show()
+    
+    def updateScreen(self,OLED):
+        
+        txtLine1 = "Spd:" + str(self.Speed)
+        txtLine2 = "Clnt:" + str(self.CoolantT)
+        txtLine3 = "Oil:" + str(self.OilT)
+        #Clear screen
+        OLED.fill(0x0000) 
+
+        #Numeric
+        OLED.text(txtLine1,1,2,OLED.white)
+        OLED.text(txtLine2,1,12,OLED.white)
+        OLED.text(txtLine3,1,22,OLED.white)
+
+        #Bar outlines
+        OLED.rect(64,2,64,8,OLED.white)
+        OLED.rect(64,12,64,8,OLED.white)
+        OLED.rect(64,22,64,8,OLED.white)
+
+        #Bar fill
+        intFill = int((self.Speed / 240) * 64)
+        OLED.fill_rect(64,2,intFill,8,OLED.white)
+        intFill = int((self.CoolantT / 120) * 64)
+        OLED.fill_rect(64,12,intFill,8,OLED.white)
+        intFill = int((self.OilT / 120) * 64)
+        OLED.fill_rect(64,22,intFill,8,0x00ff)
+
+        OLED.show()
+        
+        
+if __name__=='__main__':
+    #=====Set up display
+    OLED = OLED_2inch23()
+    OLED.fill(0x0000) 
+    OLED.show()
+    
+    dh = displayHandler()
+    dh.writeLine("Display init...",OLED)
+    time.sleep(0.5)
+    dh.drawWelcomeScreen(OLED)
+
+    #=====Set up Pico-CAN
+    can = MCP2515()
+    #0x23D - RPM
+    can.Init()
+
+    #Set filter standard identifier
+    #id = 0x123 #max 7ff
+    id = SID_RPM
+    listIDs = [SID_RPM]
+
+    dh.writeLine("CAN init...",OLED)
+    time.sleep(0.5)
+
+    OLED.fill(0x0000)
+    OLED.show()
+    dh.updateScreen(OLED)
+
+    readbuf = []
+    OilDir = False
+    while(1):
+        for sid in listIDs:
+            readbuf = can.Receive(sid)
+            #readbuf = ["Nuffin"]
+            #print("===== Filtering on " + str(sid) + "==========")
+            #print(readbuf)
+            strBuf = ".".join([str(b) for b in readbuf])
+            print(strBuf)
+            #Speed
+            if (readbuf[0] == "721"):
+                intSpd = int(readbuf[4],16)*256 + int(readbuf[3],16)                
+                dh.Speed = intSpd
+
+                print("Speed: " + str(intSpd))
+                #dh.writeLine("Spd:" + str(intSpd),OLED)
+            #RPM
+            if readbuf[0] == "573":
+                intRPM = int(readbuf[6],16)*256 + int(readbuf[5],16)
+                intRPM = round(intRPM * 3.463,0)
+                #dh.RPM = int(intRPM)
+
+                print("RPM: " + str(intRPM))
+                
+                intCoolantTemp = int(readbuf[9],16) - 50
+                dh.CoolantT = intCoolantTemp
+                print("Coolant: " + str(intCoolantTemp))
+                #dh.writeLine("RPM:" + str(intRPM) + " T: " + str(intCoolantTemp),OLED)
+            if readbuf[0] == "1361":
+                intOilTemp = int(readbuf[2],16) - 50
+                dh.OilT = intOilTemp
+
+        #simulate oil temp
+        # if OilDir :
+        #     dh.OilT = dh.OilT + 1
+        #     if dh.OilT >= 120:
+        #         OilDir = False
+        # else:
+        #     dh.OilT = dh.OilT - 1
+        #     if dh.OilT <= 0 :
+        #         OilDir = True
+
+        #Refresh screen and wait
+        dh.updateScreen(OLED)
+        time.sleep(0.1)
